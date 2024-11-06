@@ -6,22 +6,35 @@ from mylog import logging
 from typing import List, Dict
 
 datasets = ['vlsp2016', 'vlsp2018', 'vlsp2021']
-filenames = ['dev.csv', 'test.csv', 'train.csv']
+filenames = ['dev', 'test', 'train']
 
 URL_SEARCH = "http://localhost:9920/search"
 CHECKPOINT_FILE = "checkpoint.txt"
+DISTANCE_THRESHOLD = 40
 
-def search_url(url: str, k: int) -> List[str]:
+def search_url(url: str, k: int) -> List[Dict]:
     """Search for a URL with a limit of results."""
     payload = {"url": url, "k": k}
     try:
         response = requests.post(URL_SEARCH, json=payload)
         response.raise_for_status()
         logging.info(f"Search successful for {url}. Results: {response.json()}")
-        return response.json()  # Trả về kết quả tìm kiếm
+        
+        # Truy cập vào danh sách 'results' bên trong phản hồi
+        results = response.json().get("results", [])
+        
+        # Lọc kết quả dựa trên ngưỡng distance và kiểm tra loại dữ liệu
+        filtered_results = [
+            result for result in results
+            if isinstance(result, dict) and result.get("distance", float("inf")) <= DISTANCE_THRESHOLD
+        ]
+        
+        return filtered_results
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to search {url}: {str(e)}")
         return []
+
+
 
 def get_url_from_id(urls: List[str], k: int = 10) -> Dict[str, List[str]]:
     """Get top URLs from a list of input URLs by searching."""
@@ -48,7 +61,7 @@ if __name__ == '__main__':
     
     for dataset in datasets:
         for filename in filenames:
-            current_file = f'{dataset}/{filename}'
+            current_file = f'{dataset}/{filename}.csv'
             file_path = current_file
             
             # Đọc file CSV và lấy cột 'id' và 'url'
@@ -71,8 +84,10 @@ if __name__ == '__main__':
                 
                 # Cập nhật checkpoint sau mỗi mục xử lý
                 update_checkpoint(actual_index)
+
             
             # Ghi kết quả vào file JSON sau khi hoàn thành file hiện tại
+            
             path_to_file_json = f'{current_file}.json'
             write_to_json(path_to_file_json, list_documents)
             
